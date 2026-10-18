@@ -1,0 +1,1 @@
+wget -qO- https://raw.githubusercontent.com/pardon14/ImageHub/main/install.sh | sh
