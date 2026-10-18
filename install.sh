@@ -1,369 +1,192 @@
 #!/bin/sh
-
-set -e
+set -eu
 
 ###############################################################################
 # ImageHub installer
-#
-# Installs the latest official ImageHub IPK package from GitHub Releases.
-#
+# Installs the latest published ImageHub IPK from GitHub Releases.
 # Usage:
-#
-#   wget -qO- https://raw.githubusercontent.com/pardon14/ImageHub/main/install.sh | sh
-#
+#   wget -qO- https://raw.githubusercontent.com/pardon14/ImageHub/master/install.sh | sh
 ###############################################################################
 
 REPOSITORY="pardon14/ImageHub"
-
 PACKAGE_NAME="enigma2-plugin-extensions-imagehub"
-
-TMP_DIR="/tmp/imagehub-install"
-
+TMP_DIR="/tmp/imagehub-install-$$"
 PLUGIN_DIR="/usr/lib/enigma2/python/Plugins/Extensions/ImageHub"
-
 CONFIG_DIR="/etc/enigma2/imagehub"
-
 CONFIG_FILE="${CONFIG_DIR}/download_location"
 
+log() { echo "[ImageHub] $*"; }
+error() { echo "[ImageHub] ERROR: $*" >&2; exit 1; }
+cleanup() { rm -rf "$TMP_DIR"; }
+trap cleanup EXIT HUP INT TERM
 
-###############################################################################
-# Helper functions
-###############################################################################
-
-log()
-{
-    echo "[ImageHub] $1"
-}
-
-
-error()
-{
-    echo "[ImageHub] ERROR: $1" >&2
-    exit 1
-}
-
-
-cleanup()
-{
-    rm -rf "${TMP_DIR}"
-}
-
-
-trap cleanup EXIT INT TERM
-
-
-###############################################################################
-# Start
-###############################################################################
-
-echo
+printf '\n'
 echo "#####################################################"
 echo "#                                                   #"
 echo "#              ImageHub Installer                  #"
 echo "#                                                   #"
 echo "#####################################################"
-echo
+printf '\n'
 
 log "Preparing installation..."
 
-
-###############################################################################
-# Root check
-###############################################################################
-
-if [ "$(id -u)" != "0" ]; then
-    error "This installer must be run as root."
-fi
-
-
-###############################################################################
-# Enigma2 check
-###############################################################################
-
-if [ ! -d "/usr/lib/enigma2/python/Plugins" ]; then
-    error "Enigma2 plugin directory was not found."
-fi
-
-
-###############################################################################
-# opkg check
-###############################################################################
-
-if ! command -v opkg >/dev/null 2>&1; then
-    error "opkg was not found."
-fi
-
-
-###############################################################################
-# wget check
-###############################################################################
-
-if ! command -v wget >/dev/null 2>&1; then
-    error "wget was not found."
-fi
-
-
-###############################################################################
-# Python check
-#
-# ImageHub requires Python 3.
-###############################################################################
+[ "$(id -u)" = "0" ] || error "This installer must be run as root."
+[ -d "/usr/lib/enigma2/python/Plugins" ] || error "Enigma2 plugin directory was not found."
+command -v opkg >/dev/null 2>&1 || error "opkg was not found."
+command -v wget >/dev/null 2>&1 || error "wget was not found."
 
 PYTHON_BIN=""
-
-if [ -x "/usr/bin/python3" ]; then
-    PYTHON_BIN="/usr/bin/python3"
-elif [ -x "/usr/bin/python" ]; then
-    PYTHON_BIN="/usr/bin/python"
+if [ -x /usr/bin/python3 ]; then
+    PYTHON_BIN=/usr/bin/python3
+elif [ -x /usr/bin/python ]; then
+    PYTHON_BIN=/usr/bin/python
 fi
+[ -n "$PYTHON_BIN" ] || error "Python interpreter was not found."
 
-
-if [ -z "${PYTHON_BIN}" ]; then
-    error "Python interpreter was not found."
-fi
-
-
-PYTHON_VERSION=$(
-    "${PYTHON_BIN}" -c \
-    'import sys; print("{}.{}".format(sys.version_info[0], sys.version_info[1]))'
-)
-
-
-case "${PYTHON_VERSION}" in
-    3.*)
-        ;;
-    *)
-        error "ImageHub requires Python 3. Detected: ${PYTHON_VERSION}"
-        ;;
+PYTHON_VERSION=$("$PYTHON_BIN" -c 'import sys; print("{}.{}".format(sys.version_info[0], sys.version_info[1]))')
+case "$PYTHON_VERSION" in
+    3.*) ;;
+    *) error "ImageHub requires Python 3. Detected: ${PYTHON_VERSION}" ;;
 esac
-
-
 log "Python: ${PYTHON_VERSION}"
 
-
-###############################################################################
-# Prepare temporary directory
-###############################################################################
-
-rm -rf "${TMP_DIR}"
-
-mkdir -p "${TMP_DIR}"
-
-
-RELEASE_INFO="${TMP_DIR}/release.json"
-
-
-###############################################################################
-# Get latest GitHub release
-###############################################################################
+mkdir -p "$TMP_DIR"
+RELEASE_INFO="$TMP_DIR/release.json"
+ASSET_INFO="$TMP_DIR/asset.txt"
 
 log "Checking latest ImageHub release..."
-
-
 RELEASE_API_URL="https://api.github.com/repos/${REPOSITORY}/releases/latest"
-
-
-if ! wget \
-    -q \
-    --timeout=30 \
-    --tries=2 \
-    "${RELEASE_API_URL}" \
-    -O "${RELEASE_INFO}"; then
-
+if ! wget -q --timeout=30 --tries=2 "$RELEASE_API_URL" -O "$RELEASE_INFO"; then
     error "Failed to retrieve the latest ImageHub release information."
 fi
+[ -s "$RELEASE_INFO" ] || error "GitHub returned an empty release response."
 
-
-if [ ! -s "${RELEASE_INFO}" ]; then
-    error "GitHub returned an empty release response."
-fi
-
-
-###############################################################################
-# Read release information
-###############################################################################
-
-IMAGEHUB_VERSION=$(
-    "${PYTHON_BIN}" - "${RELEASE_INFO}" <<'PY'
+# Read the actual release tag and IPK asset URL from GitHub's API.
+# This avoids assuming that release tags always start with 'v'.
+if ! "$PYTHON_BIN" - "$RELEASE_INFO" "$PACKAGE_NAME" > "$ASSET_INFO" <<'PY'
 import json
 import sys
 
-path = sys.argv[1]
+path, package_name = sys.argv[1], sys.argv[2]
+with open(path, "r", encoding="utf-8") as f:
+    data = json.load(f)
 
-with open(path, "r") as file:
-    data = json.load(file)
+if data.get("message"):
+    raise SystemExit("GitHub API error: {}".format(data["message"]))
 
 tag = data.get("tag_name", "")
+assets = data.get("assets", [])
 
-if tag.startswith("v"):
-    tag = tag[1:]
-
+matches = [
+    asset for asset in assets
+    if asset.get("name", "").startswith(package_name + "_")
+    and asset.get("name", "").endswith(".ipk")
+    and asset.get("browser_download_url")
+]
 if not tag:
-    sys.exit(1)
+    raise SystemExit("Release tag was not found.")
+if len(matches) != 1:
+    names = [asset.get("name", "") for asset in assets]
+    raise SystemExit(
+        "Expected exactly one {}_*.ipk asset in the latest release; found {}. Assets: {}".format(
+            package_name, len(matches), ", ".join(names) if names else "none"
+        )
+    )
 
+asset = matches[0]
 print(tag)
+print(asset["name"])
+print(asset["browser_download_url"])
+PY
+then
+    error "Could not identify the ImageHub release and IPK asset. Ensure the latest GitHub Release contains exactly one ${PACKAGE_NAME}_*.ipk asset."
+fi
+
+IMAGEHUB_VERSION=$(sed -n '1p' "$ASSET_INFO")
+PACKAGE_FILENAME=$(sed -n '2p' "$ASSET_INFO")
+DOWNLOAD_URL=$(sed -n '3p' "$ASSET_INFO")
+[ -n "$IMAGEHUB_VERSION" ] || error "Could not determine the ImageHub release tag."
+[ -n "$PACKAGE_FILENAME" ] || error "Could not determine the IPK filename."
+[ -n "$DOWNLOAD_URL" ] || error "Could not determine the IPK download URL."
+
+PACKAGE_FILE="$TMP_DIR/$PACKAGE_FILENAME"
+log "Latest release: ${IMAGEHUB_VERSION}"
+log "Package: ${PACKAGE_FILENAME}"
+log "Downloading package..."
+
+if ! wget -q --timeout=60 --tries=2 "$DOWNLOAD_URL" -O "$PACKAGE_FILE"; then
+    error "Failed to download ${PACKAGE_FILENAME}."
+fi
+[ -s "$PACKAGE_FILE" ] || error "Downloaded ImageHub package is empty."
+PACKAGE_SIZE=$(wc -c < "$PACKAGE_FILE" | tr -d ' ')
+[ "$PACKAGE_SIZE" -ge 1000 ] || error "Downloaded package is too small to be a valid IPK."
+
+# If a matching .sha256 asset is attached to the release, verify it.
+# The checksum asset should be named exactly: <IPK filename>.sha256
+CHECKSUM_URL=$("$PYTHON_BIN" - "$RELEASE_INFO" "$PACKAGE_FILENAME" <<'PY'
+import json
+import sys
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    data = json.load(f)
+expected = sys.argv[2] + ".sha256"
+for asset in data.get("assets", []):
+    if asset.get("name") == expected and asset.get("browser_download_url"):
+        print(asset["browser_download_url"])
+        break
 PY
 )
 
-
-if [ -z "${IMAGEHUB_VERSION}" ]; then
-    error "Could not determine the latest ImageHub version."
-fi
-
-
-PACKAGE_FILENAME="${PACKAGE_NAME}_${IMAGEHUB_VERSION}_all.ipk"
-
-DOWNLOAD_URL="https://github.com/${REPOSITORY}/releases/download/v${IMAGEHUB_VERSION}/${PACKAGE_FILENAME}"
-
-PACKAGE_FILE="${TMP_DIR}/${PACKAGE_FILENAME}"
-
-
-log "Latest version: ${IMAGEHUB_VERSION}"
-
-echo
-
-
-###############################################################################
-# Download package
-###############################################################################
-
-log "Downloading ${PACKAGE_FILENAME}..."
-
-
-if ! wget \
-    -q \
-    --show-progress \
-    --timeout=60 \
-    --tries=2 \
-    "${DOWNLOAD_URL}" \
-    -O "${PACKAGE_FILE}"; then
-
-    error "Failed to download ImageHub ${IMAGEHUB_VERSION}."
-fi
-
-
-if [ ! -s "${PACKAGE_FILE}" ]; then
-    error "Downloaded ImageHub package is empty."
-fi
-
-
-###############################################################################
-# Basic package validation
-###############################################################################
-
-log "Checking downloaded package..."
-
-
-PACKAGE_SIZE=$(
-    wc -c < "${PACKAGE_FILE}"
+if [ -n "$CHECKSUM_URL" ]; then
+    CHECKSUM_FILE="$TMP_DIR/${PACKAGE_FILENAME}.sha256"
+    log "Downloading SHA-256 checksum..."
+    wget -q --timeout=30 --tries=2 "$CHECKSUM_URL" -O "$CHECKSUM_FILE" || error "Failed to download checksum file."
+    EXPECTED_SHA=$(awk 'NR == 1 {print $1}' "$CHECKSUM_FILE")
+    [ -n "$EXPECTED_SHA" ] || error "Checksum file is empty or invalid."
+    ACTUAL_SHA=$("$PYTHON_BIN" - "$PACKAGE_FILE" <<'PY'
+import hashlib
+import sys
+h = hashlib.sha256()
+with open(sys.argv[1], "rb") as f:
+    for chunk in iter(lambda: f.read(1024 * 1024), b""):
+        h.update(chunk)
+print(h.hexdigest())
+PY
 )
-
-
-if [ "${PACKAGE_SIZE}" -lt 1000 ]; then
-    error "Downloaded package appears to be invalid."
+    [ "$EXPECTED_SHA" = "$ACTUAL_SHA" ] || error "SHA-256 checksum mismatch. Aborting installation."
+    log "SHA-256 checksum verified."
+else
+    log "No SHA-256 asset found; continuing with basic package validation."
 fi
 
-
-case "${PACKAGE_FILE}" in
-    *.ipk)
-        ;;
-    *)
-        error "Downloaded file is not an IPK package."
-        ;;
-esac
-
-
-###############################################################################
-# Install package
-###############################################################################
-
-echo
+printf '\n'
 log "Installing ImageHub ${IMAGEHUB_VERSION}..."
-echo
-
-
-if ! opkg install \
-    "${PACKAGE_FILE}"; then
-
+if ! opkg install "$PACKAGE_FILE"; then
     error "opkg failed to install ImageHub."
 fi
 
-
-###############################################################################
-# Installation verification
-###############################################################################
-
-echo
+printf '\n'
 log "Verifying installation..."
+[ -d "$PLUGIN_DIR" ] || error "ImageHub plugin directory was not installed."
+[ -f "$PLUGIN_DIR/plugin.py" ] || error "ImageHub plugin.py was not installed."
+[ -d "$PLUGIN_DIR/core" ] || error "ImageHub core directory was not installed."
+[ -d "$PLUGIN_DIR/sources" ] || error "ImageHub sources directory was not installed."
+[ -d "$PLUGIN_DIR/ui" ] || error "ImageHub UI directory was not installed."
+[ -d "$CONFIG_DIR" ] || error "ImageHub configuration directory was not created."
+[ -f "$CONFIG_FILE" ] || error "ImageHub configuration file was not created."
 
-
-if [ ! -d "${PLUGIN_DIR}" ]; then
-    error "ImageHub plugin directory was not installed."
-fi
-
-
-if [ ! -f "${PLUGIN_DIR}/plugin.py" ]; then
-    error "ImageHub plugin.py was not installed."
-fi
-
-
-if [ ! -d "${PLUGIN_DIR}/core" ]; then
-    error "ImageHub core directory was not installed."
-fi
-
-
-if [ ! -d "${PLUGIN_DIR}/sources" ]; then
-    error "ImageHub sources directory was not installed."
-fi
-
-
-if [ ! -d "${PLUGIN_DIR}/ui" ]; then
-    error "ImageHub UI directory was not installed."
-fi
-
-
-###############################################################################
-# Configuration verification
-###############################################################################
-
-if [ ! -d "${CONFIG_DIR}" ]; then
-    error "ImageHub configuration directory was not created."
-fi
-
-
-if [ ! -f "${CONFIG_FILE}" ]; then
-    error "ImageHub configuration file was not created."
-fi
-
-
-###############################################################################
-# Package status verification
-###############################################################################
-
-if ! opkg status "${PACKAGE_NAME}" 2>/dev/null | grep -q \
-    "Status: install ok installed"; then
-
+if ! opkg status "$PACKAGE_NAME" 2>/dev/null | grep -q "Status: install ok installed"; then
     error "ImageHub package is not registered as installed."
 fi
 
-
-###############################################################################
-# Finished
-###############################################################################
-
-echo
-
+printf '\n'
 echo "#####################################################"
 echo "#                                                   #"
 echo "#          ImageHub installed successfully         #"
 echo "#                                                   #"
 echo "#####################################################"
-echo
-
+printf '\n'
 log "Version: ${IMAGEHUB_VERSION}"
 log "Package: ${PACKAGE_NAME}"
 log "Configuration: ${CONFIG_FILE}"
-
-echo
 log "Restart Enigma2 GUI to load ImageHub."
-echo
+printf '\n'
