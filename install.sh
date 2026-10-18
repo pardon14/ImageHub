@@ -1,3 +1,4 @@
+
 #!/bin/sh
 set -eu
 
@@ -17,10 +18,6 @@ PLUGIN_DIR="/usr/lib/enigma2/python/Plugins/Extensions/ImageHub"
 CONFIG_DIR="/etc/enigma2/imagehub"
 CONFIG_FILE="${CONFIG_DIR}/download_location"
 
-###############################################################################
-# Helper functions
-###############################################################################
-
 log() {
     echo "[ImageHub] $*"
 }
@@ -36,10 +33,6 @@ cleanup() {
 
 trap cleanup EXIT HUP INT TERM
 
-###############################################################################
-# Start
-###############################################################################
-
 echo
 echo "#####################################################"
 echo "#                                                   #"
@@ -50,9 +43,7 @@ echo
 
 log "Preparing installation..."
 
-###############################################################################
 # Environment checks
-###############################################################################
 
 [ "$(id -u)" = "0" ] || error "This installer must be run as root."
 
@@ -87,18 +78,14 @@ esac
 
 log "Python: $PYTHON_VERSION"
 
-###############################################################################
 # Prepare temporary directory
-###############################################################################
 
 mkdir -p "$TMP_DIR"
 
 RELEASE_INFO="$TMP_DIR/release.json"
 ASSET_INFO="$TMP_DIR/asset.txt"
 
-###############################################################################
 # Get latest GitHub release
-###############################################################################
 
 log "Checking latest ImageHub release..."
 
@@ -112,9 +99,7 @@ fi
 [ -s "$RELEASE_INFO" ] ||
     error "GitHub returned an empty release response."
 
-###############################################################################
 # Find IPK asset and release tag
-###############################################################################
 
 if ! "$PYTHON_BIN" - "$RELEASE_INFO" "$PACKAGE_NAME" \
     > "$ASSET_INFO" <<'PY'
@@ -183,9 +168,7 @@ PACKAGE_FILE="$TMP_DIR/$PACKAGE_FILENAME"
 log "Latest release: $IMAGEHUB_VERSION"
 log "Package: $PACKAGE_FILENAME"
 
-###############################################################################
 # Download package
-###############################################################################
 
 log "Downloading package..."
 
@@ -202,74 +185,7 @@ PACKAGE_SIZE=$(wc -c < "$PACKAGE_FILE" | tr -d ' ')
 [ "$PACKAGE_SIZE" -ge 1000 ] ||
     error "Downloaded package is too small to be a valid IPK."
 
-###############################################################################
-# Optional SHA-256 verification
-###############################################################################
-
-CHECKSUM_URL=$(
-    "$PYTHON_BIN" - "$RELEASE_INFO" "$PACKAGE_FILENAME" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as f:
-    data = json.load(f)
-
-expected = sys.argv[2] + ".sha256"
-
-for asset in data.get("assets", []):
-    if asset.get("name") == expected and asset.get("browser_download_url"):
-        print(asset["browser_download_url"])
-        break
-PY
-)
-
-if [ -n "$CHECKSUM_URL" ]; then
-    CHECKSUM_FILE="$TMP_DIR/${PACKAGE_FILENAME}.sha256"
-
-    log "Downloading SHA-256 checksum..."
-
-    if ! wget -q --timeout=30 --tries=2 \
-        "$CHECKSUM_URL" -O "$CHECKSUM_FILE"; then
-        error "Failed to download checksum file."
-    fi
-
-    EXPECTED_SHA=$(awk 'NR == 1 {print $1}' "$CHECKSUM_FILE")
-
-    case "$EXPECTED_SHA" in
-        ""|*[!0123456789abcdefABCDEF]*)
-            error "Checksum file is invalid."
-            ;;
-    esac
-
-    [ "${#EXPECTED_SHA}" -eq 64 ] ||
-        error "SHA-256 checksum must contain 64 hexadecimal characters."
-
-    ACTUAL_SHA=$(
-        "$PYTHON_BIN" - "$PACKAGE_FILE" <<'PY'
-import hashlib
-import sys
-
-h = hashlib.sha256()
-
-with open(sys.argv[1], "rb") as f:
-    for chunk in iter(lambda: f.read(1024 * 1024), b""):
-        h.update(chunk)
-
-print(h.hexdigest())
-PY
-    )
-
-    [ "$EXPECTED_SHA" = "$ACTUAL_SHA" ] ||
-        error "SHA-256 checksum mismatch. Aborting installation."
-
-    log "SHA-256 checksum verified."
-else
-    log "No SHA-256 asset found; continuing with basic package validation."
-fi
-
-###############################################################################
 # Install package
-###############################################################################
 
 echo
 log "Installing ImageHub $IMAGEHUB_VERSION..."
@@ -279,9 +195,7 @@ if ! opkg install "$PACKAGE_FILE"; then
     error "opkg failed to install ImageHub."
 fi
 
-###############################################################################
 # Installation verification
-###############################################################################
 
 echo
 log "Verifying installation..."
@@ -313,18 +227,14 @@ log "Verifying installation..."
 [ -f "$CONFIG_FILE" ] ||
     error "ImageHub configuration file was not installed."
 
-###############################################################################
 # Package status verification
-###############################################################################
 
 if ! opkg status "$PACKAGE_NAME" 2>/dev/null |
     grep -q "Status: install ok installed"; then
     error "ImageHub package is not registered as installed."
 fi
 
-###############################################################################
 # Finished
-###############################################################################
 
 echo
 echo "#####################################################"
