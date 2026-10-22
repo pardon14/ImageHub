@@ -247,6 +247,6 @@ echo
 log "Version: $IMAGEHUB_VERSION"
 log "Package: $PACKAGE_NAME"
 log "Configuration: $CONFIG_FILE"
-log "Restart Enigma2 GUI to load ImageHub."
+log "Restarted Enigma2 GUI to load ImageHub."
 
 echo
