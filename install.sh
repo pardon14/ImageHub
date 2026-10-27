@@ -241,6 +241,14 @@ echo
 
 log "Version: $IMAGEHUB_VERSION"
 log "Package: $PACKAGE_NAME"
-log "Restarted Enigma2 GUI to load ImageHub."
+log "Installation verified successfully."
+log "Scheduling Enigma2 GUI restart in the background..."
+
+# Restart only after opkg has completed and all checks passed.
+# Run detached so stopping Enigma2 cannot interrupt this installer.
+if ! ( /bin/sh -c 'sleep 3; init 4; sleep 4; init 3' >/tmp/imagehub_gui_restart.log 2>&1 </dev/null & ); then
+    log "WARNING: Could not schedule GUI restart automatically."
+    log "Restart Enigma2 GUI manually after installation."
+fi
 
 echo
