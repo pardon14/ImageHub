@@ -15,8 +15,6 @@ PACKAGE_NAME="enigma2-plugin-extensions-imagehub"
 TMP_DIR="/tmp/imagehub-install-$$"
 
 PLUGIN_DIR="/usr/lib/enigma2/python/Plugins/Extensions/ImageHub"
-CONFIG_DIR="/etc/enigma2/imagehub"
-CONFIG_FILE="${CONFIG_DIR}/download_location"
 
 log() {
     echo "[ImageHub] $*"
@@ -224,9 +222,6 @@ log "Verifying installation..."
 [ -d "$PLUGIN_DIR/logos" ] ||
     error "ImageHub logos directory was not installed."
 
-[ -f "$CONFIG_FILE" ] ||
-    error "ImageHub configuration file was not installed."
-
 # Package status verification
 
 if ! opkg status "$PACKAGE_NAME" 2>/dev/null |
@@ -246,7 +241,6 @@ echo
 
 log "Version: $IMAGEHUB_VERSION"
 log "Package: $PACKAGE_NAME"
-log "Configuration: $CONFIG_FILE"
 log "Restarted Enigma2 GUI to load ImageHub."
 
 echo
