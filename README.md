@@ -8,6 +8,11 @@
 <p align="center">
   Plugin Enigma2 do przeglądania i pobierania obrazów systemowych.
 </p>
+<p align="center">
+  <a href="https://github.com/pardon14/ImageHub/releases">
+    <img src="https://img.shields.io/github/downloads/pardon14/ImageHub/total.svg?label=Downloads&color=amber" alt="Downloads">
+  </a>
+</p>
 
 ---
 
