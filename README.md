@@ -49,6 +49,10 @@ Dostępność obrazów, wersji i modeli zależy od poszczególnych źródeł.
 
 - **Logotypy dystrybucji:** bazują na oryginalnych znakach graficznych, które zostały przetworzone przy użyciu AI. Ich wygląd może nieznacznie różnić się od oryginałów. Wszystkie prawa do znaków towarowych należą do ich właścicieli.
 
+## Wymagania
+
+- Python 2.7.x lub Python 3.x
+
 ## Instalacja
 
 1. Połącz się z odbiornikiem Enigma2 przez SSH i wykonaj polecenie:
@@ -133,6 +137,10 @@ Image, release and receiver model availability depends on the respective sources
   License: https://www.apache.org/licenses/LICENSE-2.0
 
 - **Distribution logos:** based on original logos processed using AI. Their appearance may differ slightly from the originals. All trademarks belong to their respective owners.
+
+## Requirements
+
+- Python 2.7.x or Python 3.x
 
 ## Installation
 
