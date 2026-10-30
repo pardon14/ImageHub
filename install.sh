@@ -19,6 +19,10 @@ log() {
     echo "[ImageHub] $*"
 }
 
+warn() {
+    echo "[ImageHub] WARNING: $*" >&2
+}
+
 error() {
     echo "[ImageHub] ERROR: $*" >&2
     exit 1
@@ -59,6 +63,10 @@ if [ -x "/usr/bin/python3" ]; then
     PYTHON_BIN="/usr/bin/python3"
 elif [ -x "/usr/bin/python" ]; then
     PYTHON_BIN="/usr/bin/python"
+elif [ -x "/usr/bin/python2.7" ]; then
+    PYTHON_BIN="/usr/bin/python2.7"
+elif [ -x "/usr/bin/python2" ]; then
+    PYTHON_BIN="/usr/bin/python2"
 fi
 
 [ -n "$PYTHON_BIN" ] || error "Python interpreter was not found."
@@ -69,8 +77,8 @@ PYTHON_VERSION=$(
 )
 
 case "$PYTHON_VERSION" in
-    3.*) ;;
-    *) error "ImageHub requires Python 3. Detected: $PYTHON_VERSION" ;;
+    2.7|3.*) ;;
+    *) error "ImageHub requires Python 2.7 or Python 3. Detected: $PYTHON_VERSION" ;;
 esac
 
 log "Python: $PYTHON_VERSION"
@@ -100,13 +108,14 @@ fi
 
 if ! "$PYTHON_BIN" - "$RELEASE_INFO" "$PACKAGE_NAME" \
     > "$ASSET_INFO" <<'PY'
+import io
 import json
 import sys
 
 path, package_name = sys.argv[1], sys.argv[2]
 
 try:
-    with open(path, "r", encoding="utf-8") as f:
+    with io.open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
 except Exception as exc:
     raise SystemExit("Cannot read GitHub release JSON: {}".format(exc))
@@ -220,6 +229,14 @@ log "Verifying installation..."
 
 [ -d "$PLUGIN_DIR/logos" ] ||
     error "ImageHub logos directory was not installed."
+
+# Not fatal: the plugin still works without them, but with reduced
+# functionality (PNG icons for Python 2 images, bundled GlobalSign root).
+[ -d "$PLUGIN_DIR/icons/png" ] ||
+    warn "icons/png was not installed (icons may be missing on Python 2 images)."
+
+[ -f "$PLUGIN_DIR/certs/GlobalSign_Root_R46.pem" ] ||
+    warn "certs/GlobalSign_Root_R46.pem was not installed (OpenViX TLS fallback reduced)."
 
 # Package status verification
 
