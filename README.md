@@ -37,7 +37,7 @@ ImageHub pobiera obrazy bezpośrednio z oficjalnych źródeł ich producentów i
 
 ## Obsługiwane dystrybucje
 
-OpenATV · OpenPLi · OpenBH · OpenDroid · OpenViX · OpenSPA · PurE2 · OpenVision · TeamBlue · SatDreamGr · VTi
+OpenATV · OpenPLi · OpenBH · OpenDroid · OpenViX · OpenSPA · PurE2 · OpenVision · TeamBlue · SatDreamGr · EGAMI · VTi
 
 Dostępność obrazów, wersji i modeli zależy od poszczególnych źródeł.
 
@@ -126,7 +126,7 @@ ImageHub downloads images directly from their official publishers and developers
 
 ## Supported Distributions
 
-OpenATV · OpenPLi · OpenBH · OpenDroid · OpenViX · OpenSPA · PurE2 · OpenVision · TeamBlue · SatDreamGr · VTi
+OpenATV · OpenPLi · OpenBH · OpenDroid · OpenViX · OpenSPA · PurE2 · OpenVision · TeamBlue · SatDreamGr · EGAMI · VTi
 
 Image, release and receiver model availability depends on the respective sources.
 
